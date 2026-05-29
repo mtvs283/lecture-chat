@@ -16,7 +16,6 @@
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Segoe UI','Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;}
-body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);pointer-events:none;z-index:9999;}
 
 /* HEADER */
 header{background:linear-gradient(90deg,#070712,#0d0d22,#070712);border-bottom:1px solid var(--cyan);box-shadow:0 0 20px rgba(0,229,255,0.2);padding:6px 18px;display:flex;align-items:center;gap:12px;flex-shrink:0;}
@@ -320,11 +319,11 @@ document.getElementById('nameInp').focus();
 
 function setName(){
   const v=document.getElementById('nameInp').value.trim();
-  if(!v){toast('이름을 입력해주세요');return;}
+  if(!v){alert('이름을 입력해주세요');return;}
   myName=v;
   document.getElementById('nameModal').classList.remove('show');
   document.getElementById('mainLabel').textContent='🎓 '+myName+' (나)';
-  initPeer();
+  try{initPeer();}catch(e){console.error(e);}
 }
 
 function initPeer(){
@@ -680,4 +679,7 @@ function toggleRecord(){
     mediaRecorder.ondataavailable=e=>{if(e.data.size>0)recChunks.push(e.data);};
     mediaRecorder.onstop=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(recChunks,{type:'video/webm'}));a.download='TK쌤강의_'+new Date().toLocaleDateString('ko-KR')+'.webm';a.click();toast('✅ 녹화 저장됨');};
     mediaRecorder.start(1000);recOn=true;document.getElementById('btnRec').className='ctrl-btn off';document.getElementById('btnRec').textContent='⏹️';toast('🔴 녹화 시작');
-  }else{med
+  }else{mediaRecorder.stop();recOn=false;document.getElementById('btnRec').className='ctrl-btn on';document.getElementById('btnRec').textContent='⏺️';}
+}
+let toastT;
+fun
