@@ -237,7 +237,7 @@ header{background:linear-gradient(90deg,#070712,#0d0d22,#070712);border-bottom:1
         </div>
         <div>
           <div class="lbl">🚪 학생 — 방 코드로 입장</div>
-          <input class="inp" id="joinCode" placeholder="방 코드 붙여넣기..." style="margin-bottom:8px;text-align:center"/>
+          <input class="inp" id="joinCode" placeholder="예: A3K9X2 (6자리)" maxlength="16" style="margin-bottom:8px;text-align:center;text-transform:uppercase"/>
           <button class="btn s" id="btnJoin" onclick="joinRoom()" disabled>입장하기</button>
         </div>
         <div id="roomInfo" style="display:none">
@@ -326,21 +326,50 @@ function setName(){
   try{initPeer();}catch(e){console.error(e);}
 }
 
-function initPeer(){
-  peer=new Peer(undefined,{host:'0.peerjs.com',port:443,secure:true,
-    config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]}});
-  peer.on('open',id=>{
-    myPeerId=id;setStatus('대기 중',false);
-    // URL에 방 코드가 있으면 자동으로 입력
-    const urlRoom=new URLSearchParams(location.search).get('room');
-    if(urlRoom){
-      document.getElementById('joinCode').value=urlRoom;
-      toast('🔗 방 코드 자동 입력됨! 카메라 시작 후 입장하기를 눌러주세요');
-    }
-  });
+function peerOpts(){
+  return{host:'0.peerjs.com',port:443,secure:true,
+    config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]}};
+}
+function attachPeerHandlers(){
   peer.on('connection',onIncomingConn);
   peer.on('call',onIncomingCall);
-  peer.on('error',e=>toast('⚠️ '+e.message));
+  peer.on('error',e=>toast('⚠️ '+(e.message||e.type||'연결 오류')));
+}
+function onPeerOpen(id){
+  myPeerId=id;setStatus('대기 중',false);
+  const urlRoom=new URLSearchParams(location.search).get('room');
+  if(urlRoom){
+    document.getElementById('joinCode').value=urlRoom.trim().toUpperCase();
+    toast('🔗 방 코드 자동 입력됨! 카메라 시작 후 입장하기를 눌러주세요');
+  }
+}
+function initPeer(){
+  if(peer)peer.destroy();
+  peer=new Peer(undefined,peerOpts());
+  attachPeerHandlers();
+  peer.on('open',onPeerOpen);
+}
+function genRoomCode(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let c='';
+  for(let i=0;i<6;i++)c+=chars[Math.floor(Math.random()*chars.length)];
+  return c;
+}
+function openPeerAs(id){
+  return new Promise((resolve,reject)=>{
+    if(peer)peer.destroy();
+    peer=new Peer(id,peerOpts());
+    attachPeerHandlers();
+    let done=false;
+    const fail=e=>{
+      if(done)return;
+      done=true;
+      if(e.type==='unavailable-id')reject(new Error('unavailable'));
+      else reject(e);
+    };
+    peer.once('open',openedId=>{if(done)return;done=true;myPeerId=openedId;resolve(openedId);});
+    peer.once('error',fail);
+  });
 }
 
 async function startMedia(){
@@ -406,18 +435,37 @@ function stopShare(){
   shareOn=false; document.getElementById('btnShare').className='ctrl-btn on'; toast('화면 공유 종료');
 }
 
-function createRoom(){
+async function createRoom(){
   if(!localStream){toast('먼저 카메라를 시작하세요');return;}
-  isHost=true; roomCode=myPeerId;
-  showRoomCode(myPeerId);
-  setStatus('방 개설 · 대기 중',true);
-  addAttRecord(myName,'강사','me');
-  addMyParticipant();
-  toast('✅ 방 개설됨! 코드를 학생에게 공유하세요');
+  if(isHost&&roomCode){toast('이미 방이 열려 있습니다 · 코드: '+roomCode);return;}
+  const btn=document.getElementById('btnCreate');
+  btn.disabled=true;
+  try{
+    for(let n=0;n<8;n++){
+      try{
+        const code=await openPeerAs(genRoomCode());
+        roomCode=code;isHost=true;
+        showRoomCode(code);
+        setStatus('방 개설 · 대기 중',true);
+        addAttRecord(myName,'강사','me');
+        addMyParticipant();
+        btn.textContent='✅ 방 개설됨';
+        toast('✅ 방 코드 '+code+' · 아래 박스 클릭하면 링크 복사');
+        return;
+      }catch(e){
+        if(e.message!=='unavailable')throw e;
+      }
+    }
+    toast('❌ 방 코드 생성 실패. 잠시 후 다시 시도해 주세요');
+    btn.disabled=false;
+  }catch(e){
+    toast('❌ 방 개설 실패: '+(e.message||e));
+    btn.disabled=false;
+  }
 }
 
 function joinRoom(){
-  const code=document.getElementById('joinCode').value.trim();
+  const code=document.getElementById('joinCode').value.trim().toUpperCase();
   if(!code){toast('방 코드를 입력하세요');return;}
   if(!localStream){toast('먼저 카메라를 시작하세요');return;}
   roomCode=code; toast('🔌 연결 중...');
@@ -665,9 +713,11 @@ function showTab(i){
 }
 function showRoomCode(code){document.getElementById('roomInfo').style.display='block';document.getElementById('myRoomCode').textContent=code;document.getElementById('roomPill').style.display='block';}
 function copyRoom(){
-  const code=document.getElementById('myRoomCode').textContent;
+  const code=document.getElementById('myRoomCode').textContent.trim();
+  if(!code||code==='-'){toast('먼저 새 방 만들기를 눌러 주세요');return;}
   const link=location.origin+location.pathname+'?room='+encodeURIComponent(code);
-  navigator.clipboard.writeText(link).then(()=>toast('📋 입장 링크 복사됨! 학생에게 바로 보내세요'));
+  const text=code+'\n'+link;
+  navigator.clipboard.writeText(text).then(()=>toast('📋 코드 '+code+' + 링크 복사됨'));
 }
 function leaveRoom(){Object.values(peers).forEach(p=>{p.call?.close();p.dataConn?.close();});localStream?.getTracks().forEach(t=>t.stop());location.reload();}
 function setStatus(txt,live){document.getElementById('statusTxt').textContent=txt;document.getElementById('dot').className='dot'+(live?' live':'');}
@@ -682,4 +732,15 @@ function toggleRecord(){
   }else{mediaRecorder.stop();recOn=false;document.getElementById('btnRec').className='ctrl-btn on';document.getElementById('btnRec').textContent='⏺️';}
 }
 let toastT;
-fun
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.remove('hide');
+  clearTimeout(toastT);
+  toastT=setTimeout(()=>el.classList.add('hide'),3000);
+}
+function esc(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
