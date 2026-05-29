@@ -330,7 +330,15 @@ function setName(){
 function initPeer(){
   peer=new Peer(undefined,{host:'0.peerjs.com',port:443,secure:true,
     config:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'}]}});
-  peer.on('open',id=>{myPeerId=id;setStatus('대기 중',false);});
+  peer.on('open',id=>{
+    myPeerId=id;setStatus('대기 중',false);
+    // URL에 방 코드가 있으면 자동으로 입력
+    const urlRoom=new URLSearchParams(location.search).get('room');
+    if(urlRoom){
+      document.getElementById('joinCode').value=urlRoom;
+      toast('🔗 방 코드 자동 입력됨! 카메라 시작 후 입장하기를 눌러주세요');
+    }
+  });
   peer.on('connection',onIncomingConn);
   peer.on('call',onIncomingCall);
   peer.on('error',e=>toast('⚠️ '+e.message));
@@ -657,7 +665,11 @@ function showTab(i){
   if(i===3){chatUnread=0;document.getElementById('chatBadge').textContent='';}
 }
 function showRoomCode(code){document.getElementById('roomInfo').style.display='block';document.getElementById('myRoomCode').textContent=code;document.getElementById('roomPill').style.display='block';}
-function copyRoom(){const code=document.getElementById('myRoomCode').textContent;navigator.clipboard.writeText(code).then(()=>toast('📋 방 코드 복사됨!'));}
+function copyRoom(){
+  const code=document.getElementById('myRoomCode').textContent;
+  const link=location.origin+location.pathname+'?room='+encodeURIComponent(code);
+  navigator.clipboard.writeText(link).then(()=>toast('📋 입장 링크 복사됨! 학생에게 바로 보내세요'));
+}
 function leaveRoom(){Object.values(peers).forEach(p=>{p.call?.close();p.dataConn?.close();});localStream?.getTracks().forEach(t=>t.stop());location.reload();}
 function setStatus(txt,live){document.getElementById('statusTxt').textContent=txt;document.getElementById('dot').className='dot'+(live?' live':'');}
 function toggleFull(){if(!document.fullscreenElement)document.documentElement.requestFullscreen();else document.exitFullscreen();}
@@ -668,8 +680,4 @@ function toggleRecord(){
     mediaRecorder.ondataavailable=e=>{if(e.data.size>0)recChunks.push(e.data);};
     mediaRecorder.onstop=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(recChunks,{type:'video/webm'}));a.download='TK쌤강의_'+new Date().toLocaleDateString('ko-KR')+'.webm';a.click();toast('✅ 녹화 저장됨');};
     mediaRecorder.start(1000);recOn=true;document.getElementById('btnRec').className='ctrl-btn off';document.getElementById('btnRec').textContent='⏹️';toast('🔴 녹화 시작');
-  }else{mediaRecorder.stop();recOn=false;document.getElementById('btnRec').className='ctrl-btn on';document.getElementById('btnRec').textContent='⏺️';}
-}
-let toastT;
-function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.remove('hide');clearTimeout(toastT);toastT=setTimeout(()=>el.classList.add('hide'),3200);}
-function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  }else{med
